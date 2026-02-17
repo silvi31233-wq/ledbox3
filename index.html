@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>LEDBOX 대형 전광판 자동견적</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--bd:#e7e9ee;--tx:#111827;--mut:#6b7280;--sh:0 10px 25px rgba(0,0,0,.06);--r:14px}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
+.wrap{max-width:1240px;margin:24px auto;padding:0 16px}
+.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;align-items:start}
+@media(max-width:980px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh)}
+.card h2{margin:0;padding:14px 16px;border-bottom:1px solid var(--bd);font-size:16px}
+.card .c{padding:16px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.row{grid-template-columns:1fr}}
+label{display:block;font-size:13px;color:var(--mut);margin-bottom:6px}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:10px;font-size:14px;background:#fff}
+textarea{resize:vertical;min-height:110px;line-height:1.5}
+.hint{font-size:12px;color:var(--mut);line-height:1.45}
+
+/* ===== PREVIEW ===== */
+.preview{position:relative;aspect-ratio:16/9;border-radius:12px;border:1px solid var(--bd);overflow:hidden;background:#0b0f17}
+.bgimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+
+/* ===== TABLE / PRICE / BUTTONS ===== */
+.tbl{width:100%;border-collapse:collapse;border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+.tbl th,.tbl td{padding:11px 12px;border-bottom:1px solid var(--bd);font-size:14px}
+.tbl th{width:34%;background:#fafafa;color:#374151;text-align:left}
+.price{padding:12px 14px;border:1px solid var(--bd);border-radius:12px;background:#fff}
+.pTop{display:flex;justify-content:space-between;gap:12px;align-items:flex-end}
+.pTop .t{font-size:13px;color:var(--mut)}
+.pTop .v{font-size:22px;font-weight:900}
+.btns{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.btn{width:100%;display:flex;align-items:center;justify-content:center;border-radius:12px;padding:12px 14px;font-weight:800;font-size:14px;border:1px solid var(--bd);background:#fff;color:#111;text-decoration:none;cursor:pointer}
+.btn.primary{background:#111;color:#fff;border-color:#111}
+.btn[aria-disabled="true"]{opacity:.45;pointer-events:none}
+
+/* ===== MODAL + PRINT ===== */
+#quoteModal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9999}
+#inquiryModal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9999}
+#quoteModal .box,#inquiryModal .box{width:520px;max-width:92vw;background:#fff;border-radius:16px;border:1px solid var(--bd);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+#quoteModal header,#inquiryModal header{padding:14px 16px;border-bottom:1px solid var(--bd);font-weight:900}
+#quoteModal .b,#inquiryModal .b{padding:16px}
+#quoteModal .a,#inquiryModal .a{display:flex;gap:10px;justify-content:flex-end;padding:14px 16px;border-top:1px solid var(--bd)}
+#quotePrintArea{display:none}
+@media print{body *{visibility:hidden}#quotePrintArea,#quotePrintArea *{visibility:visible}#quotePrintArea{position:absolute;left:0;top:0;width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="grid">
+    <div class="card">
+      <h2>대형 전광판 선정 가이드</h2>
+      <div class="c">
+        <div class="preview" id="preview">
+          <!-- 1) 같은 디렉토리의 system.png 사용 -->
+          <img class="bgimg" src="system.png" alt="미리보기 배경" onerror="this.style.display='none'">
+        </div>
+</div>
+    </div>
+
+    <div class="card">
+      <h2>1. 사이즈 선택</h2>
+      <div class="c">
+        <p class="hint" style="margin-top:0">mm 또는 m 중 편한 단위를 입력하세요(서로 자동 동기화).</p>
+        <p class="hint" style="margin-top:6px">※ 실제 측정한 가로/세로와 시청거리(최소)를 입력하면 피치를 추천합니다.</p>
+        <div class="row">
+          <div><label>가로 (mm)</label><input id="w_mm" type="number" min="1" step="1" placeholder="예: 3000"></div>
+          <div><label>세로 (mm)</label><input id="h_mm" type="number" min="1" step="1" placeholder="예: 1500"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label>가로 (m)</label><input id="w_m" type="number" min="0" step="0.01" placeholder="예: 3.00"></div>
+          <div><label>세로 (m)</label><input id="h_m" type="number" min="0" step="0.01" placeholder="예: 1.50"></div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>2. 시청거리 (최소, m)</label>
+            <input id="view_m" type="number" min="0" step="0.1" placeholder="예: 10">
+            <div class="hint">※ 시청거리가 짧을수록 더 높은 해상도(작은 피치)가 필요합니다.</div>
+          </div>
+          <div>
+            <label>해상도 선택</label>
+            <select id="pitchMode">
+              <option value="auto" selected>자동 추천</option>
+              <option value="manual">수동 선택</option>
+            </select>
+            <div style="margin-top:10px">
+              <label>피치(해상도)</label>
+              <select id="pitchSelect" disabled></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2) 옵션은 전원만 남기고 나머지 삭제 -->
+        <div class="row" style="margin-top:10px">
+          <div><label>3. 옵션 - 전원</label><select id="powerSelect"></select></div>
+          <div><label>비고</label><input id="memo" placeholder="예: 설치 위치/요청사항"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>맞춤 전광판</h2>
+      <div class="c">
+        <table class="tbl">
+          <tr><th>피치</th><td id="out_pitch">-</td></tr>
+          <tr><th>사이즈</th><td id="out_size">-</td></tr>
+          <tr><th>권장 시청거리</th><td id="out_view">-</td></tr>
+          <tr><th>해상도</th><td id="out_res">-</td></tr>
+          <tr><th>전원</th><td id="out_power">-</td></tr>
+          <!-- 3) 컨트롤/설치 행 삭제 -->
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>가격 및 버튼</h2>
+      <div class="c">
+        <div class="price">
+          <div class="pTop">
+            <div>
+              <div class="t">가격</div>
+              <div class="v" id="out_price">-</div>
+            </div>
+          </div>
+          <div class="hint" style="margin-top:8px">배송비: 문의 / VAT: 별도(정책에 맞게 수정)</div>
+        </div>
+        <div class="btns">
+          <button class="btn primary" id="btnInquiryOrder" type="button">문의 및 주문하기</button>
+          <button class="btn" id="btnPrint" type="button">견적서 출력</button>
+          <a class="btn" id="btnBrowse" href="https://ledbox001.cafe24.com/category/%EC%8B%A4%EB%82%B4%EC%9A%A9/75/">제품 둘러보기</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="inquiryModal" role="dialog" aria-modal="true" aria-label="문의 및 주문하기">
+  <div class="box">
+    <header>문의 및 주문하기</header>
+    <div class="b">
+      <div class="row">
+        <div><label>회사명</label><input id="inqCompany" placeholder="회사명"></div>
+        <div><label>담당자</label><input id="inqName" placeholder="담당자"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>연락처</label><input id="inqTel" placeholder="010-0000-0000"></div>
+        <div><label>이메일</label><input id="inqEmail" placeholder="example@domain.com"></div>
+      </div>
+      <div style="margin-top:10px"><label>주소</label><input id="inqAddr" placeholder="주소(선택)"></div>
+      <div style="margin-top:10px">
+        <label>문의 내용</label>
+        <textarea id="inqMsg" rows="5" placeholder="예) 설치 환경, 납기, 결제, 원하는 사양 등을 적어주세요."></textarea>
+        <div class="hint" style="margin-top:6px">※ 확인을 누르면 메일 앱이 열리며, 자동으로 회사 메일(7952320@naver.com)로 작성됩니다.</div>
+      </div>
+    </div>
+    <div class="a">
+      <button class="btn" type="button" id="btnInqCancel">취소</button>
+      <button class="btn primary" type="button" id="btnInqSend">확인</button>
+    </div>
+  </div>
+</div>
+
+<div id="quoteModal" role="dialog" aria-modal="true" aria-label="고객 정보 입력">
+  <div class="box">
+    <header>고객 정보 입력</header>
+    <div class="b">
+      <div class="row">
+        <div><label>회사명</label><input id="custCompany" placeholder="회사명"></div>
+        <div><label>담당자</label><input id="custName" placeholder="담당자"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>연락처</label><input id="custTel" placeholder="010-0000-0000"></div>
+        <div><label>이메일</label><input id="custEmail" placeholder="example@domain.com"></div>
+      </div>
+      <div style="margin-top:10px"><label>주소</label><input id="custAddr" placeholder="주소(선택)"></div>
+    </div>
+    <div class="a">
+      <button class="btn" type="button" id="btnModalCancel">취소</button>
+      <button class="btn primary" type="button" id="btnModalMake">견적서 생성</button>
+    </div>
+  </div>
+</div>
+
+<div id="quotePrintArea"></div>
+
+<script>
+
+/* ===== CONFIG ===== */
+const PITCHES = [
+  // 대형 전광판용 피치 테이블 (필요시 module_price만 실제값으로 교체)
+  { id:"P4",  pitch:4.0,  label:"P4",  module_w:320, module_h:160, module_price:0, min_view:"4~5.9",  opt_view:"8~15"  },
+  { id:"P6",  pitch:6.0,  label:"P6",  module_w:320, module_h:160, module_price:0, min_view:"6~7.9",  opt_view:"12~22" },
+  { id:"P8",  pitch:8.0,  label:"P8",  module_w:320, module_h:160, module_price:0, min_view:"8~9.9",  opt_view:"16~30" },
+  { id:"P10", pitch:10.0, label:"P10", module_w:320, module_h:160, module_price:0, min_view:"10 이상", opt_view:"20~40" },
+];
+const OPTIONS = {
+  power:[{id:"220v",label:"220V (기본)"},{id:"3p",label:"삼상전원 (별도)"}],
+};
+// 사이즈/피치별 빠른주문 링크 테이블(원하는대로 채우기)
+const ORDER_LINK_TABLE = {
+  // "P10:3000x1500": "https://ledbox.co.kr/order/p10-3000x1500",
+};
+
+/* ===== STATE ===== */
+const state = { w_mm:null,h_mm:null,view_m:null,pitchMode:"auto",pitchId:null,powerId:"220v" };
+
+const el = (id)=>document.getElementById(id);
+const toNum = (v)=>{ const n=Number(v); return Number.isFinite(n)&&n>0 ? n : null; };
+const mmFromM = (m)=>Math.round(m*1000);
+const fmtMm = (mm)=>mm?mm.toLocaleString("ko-KR"):"-";
+const fmtKRW = (n)=>Number.isFinite(n)?(n.toLocaleString("ko-KR")+"원"):"-";
+
+// 해상도(px) 계산: (실제 계산된 전광판 사이즈 mm) / (피치 mm)
+function resolution(w_mm, h_mm, pitch_mm){
+  const p = Number(pitch_mm);
+  if(!w_mm || !h_mm || !(p>0)) return null;
+  return { w: Math.round(w_mm / p), h: Math.round(h_mm / p) };
+}
+
+/* ===== LOGIC ===== */
+function parseViewRange(str){
+  const s=(str||"").trim();
+  if(!s) return null;
+  if(s.includes("이상")){
+    const n=parseFloat(s);
+    return Number.isFinite(n)?{min:n,max:Infinity}:null;
+  }
+  if(s.includes("~")){
+    const [a,b]=s.split("~").map(x=>parseFloat(String(x).trim()));
+    if(Number.isFinite(a)&&Number.isFinite(b)) return {min:a,max:b};
+  }
+  const n=parseFloat(s);
+  return Number.isFinite(n)?{min:n,max:n}:null;
+}
+
+function pitchByView(view_m){
+  if(!view_m) return null;
+  // 엑셀의 '최소시청거리' 구간에 들어가는 피치를 선택
+  for(const p of PITCHES){
+    const r=parseViewRange(p.min_view);
+    if(!r) continue;
+    if(view_m>=r.min && view_m<=r.max) return p.id;
+  }
+  // 구간에 안 걸리면 가장 가까운 쪽으로 보정
+  const ranges=PITCHES.map(p=>({p, r:parseViewRange(p.min_view)})).filter(x=>x.r);
+  ranges.sort((a,b)=>a.r.min-b.r.min);
+  if(view_m < ranges[0].r.min) return ranges[0].p.id;
+  return ranges[ranges.length-1].p.id;
+}
+/* resolution: 4K 고정 출력으로 계산 생략 */
+function calcModules(){
+  if(!state.w_mm||!state.h_mm||!state.pitchId) return null;
+  const p=PITCHES.find(x=>x.id===state.pitchId); if(!p) return null;
+
+  // "입력한 실측 크기를 넘지 않는 선" => floor(내림)으로 모듈 개수 산정
+  let cols = Math.floor(state.w_mm / p.module_w);
+  let rows = Math.floor(state.h_mm / p.module_h);
+
+  // 너무 작게 입력해도 최소 1개는 잡아주기(대신 실제 사이즈가 입력값보다 커질 수 있음)
+  cols = Math.max(1, cols);
+  rows = Math.max(1, rows);
+
+  const w_calc = cols * p.module_w;
+  const h_calc = rows * p.module_h;
+
+  return { cols, rows, w_calc, h_calc, module_w:p.module_w, module_h:p.module_h, module_price:p.module_price };
+}
+
+function calcPrice(){
+  const m=calcModules(); if(!m) return null;
+  if(!(m.module_price>0)) return null;
+  let total = m.cols * m.rows * m.module_price;
+
+  // 옵션: 삼상전원 비용 가산(원하면 0으로 바꿔도 됨)
+  if(state.powerId==="3p") total = Math.round(total * 1.03);
+
+  // 원 단위 반올림(1000원 단위)
+  return Math.round(total/1000)*1000;
+}
+
+
+function orderKey(){
+  if(!state.pitchId||!state.w_mm||!state.h_mm) return null;
+  return `${state.pitchId}:${state.w_mm}x${state.h_mm}`;
+}
+function applyOrderLink(){
+  // 대형 전광판은 "문의 및 주문하기" 버튼을 항상 활성화합니다.
+  const btn = el("btnInquiryOrder");
+  if(btn){ btn.disabled = false; }
+}
+}
+function initSelect(id,items){
+  el(id).innerHTML = items.map(x=>`<option value="${x.id}">${x.label}</option>`).join("");
+}
+function render(){
+  const p=PITCHES.find(x=>x.id===state.pitchId) || null;
+  const m=calcModules();
+
+  el("out_pitch").textContent = p ? p.label : "-";
+
+  if(m){
+    el("out_size").textContent = `가로 ${fmtMm(m.w_calc)} × 세로 ${fmtMm(m.h_calc)} (mm)`;
+  }else{
+    el("out_size").textContent = (state.w_mm&&state.h_mm)?`가로 ${fmtMm((m&&m.w_calc)||state.w_mm)} × 세로 ${fmtMm((m&&m.h_calc)||state.h_mm)} (mm)`:"-";
+  }
+
+  // 권장 시청거리: 엑셀 '최적시청거리'
+  el("out_view").textContent = p ? `권장 ${p.opt_view}m` : (state.view_m?`최소 ${state.view_m}m`:"-");
+
+  // 해상도(px): 피치와 계산된 실제 사이즈 기준
+  if(m && p){
+    const r = resolution(m.w_calc, m.h_calc, p.pitch);
+    el("out_res").textContent = r ? `${r.w.toLocaleString("ko-KR")} × ${r.h.toLocaleString("ko-KR")} px (최대 4K 지원)` : "최대 4K 지원";
+  }else{
+    el("out_res").textContent = "최대 4K 지원";
+  }
+
+  el("out_power").textContent = OPTIONS.power.find(x=>x.id===state.powerId)?.label||"-";
+
+  const price=calcPrice();
+  el("out_price").textContent = price?fmtKRW(price):"문의";
+
+  applyOrderLink();
+}
+
+/* ===== SIZE SYNC ===== */
+function sync(from){
+  const wmm=toNum(el("w_mm").value), hmm=toNum(el("h_mm").value);
+  const wm=toNum(el("w_m").value), hm=toNum(el("h_m").value);
+  if(from==="mm"){
+    if(wmm) el("w_m").value=(wmm/1000).toFixed(2);
+    if(hmm) el("h_m").value=(hmm/1000).toFixed(2);
+  }else{
+    if(wm) el("w_mm").value=mmFromM(wm);
+    if(hm) el("h_mm").value=mmFromM(hm);
+  }
+}
+function recompute(){
+  state.w_mm = toNum(el("w_mm").value) || (toNum(el("w_m").value)?mmFromM(toNum(el("w_m").value)):null);
+  state.h_mm = toNum(el("h_mm").value) || (toNum(el("h_m").value)?mmFromM(toNum(el("h_m").value)):null);
+  state.view_m = toNum(el("view_m").value);
+  state.pitchMode = el("pitchMode").value;
+  state.powerId = el("powerSelect").value || state.powerId || "220v";
+  el("powerSelect").value = state.powerId;
+
+  if(state.pitchMode==="auto"){
+    el("pitchSelect").disabled=true;
+    state.pitchId = pitchByView(state.view_m) || state.pitchId || "P10";
+  }else{
+    el("pitchSelect").disabled=false;
+    state.pitchId = el("pitchSelect").value || state.pitchId || "P10";
+  }
+  el("pitchSelect").value = state.pitchId;
+  render();
+}
+
+/* ===== QUOTE PRINT ===== */
+function openInquiryModal(){ el("inquiryModal").style.display="flex"; }
+function closeInquiryModal(){ el("inquiryModal").style.display="none"; }
+
+function buildInquiryMail(){
+  // 제품 선택이 없으면 보내지 않음
+  const m = calcModules();
+  if(!m || !state.pitchId){ alert("먼저 사이즈/시청거리(또는 피치)를 설정해 주세요."); return; }
+
+  const to = "7952320@naver.com";
+  const cust = {
+    company: el("inqCompany").value||"-",
+    name: el("inqName").value||"-",
+    tel: el("inqTel").value||"-",
+    email: el("inqEmail").value||"-",
+    addr: el("inqAddr").value||"-",
+    msg: el("inqMsg").value||"-",
+  };
+
+  const p = PITCHES.find(x=>x.id===state.pitchId);
+  const price = calcPrice();
+  const sizeLine = `가로 ${m.w_calc} × 세로 ${m.h_calc} (mm)  [모듈 ${m.cols}×${m.rows}]`;
+  const subject = `[LEDBOX 문의/주문] ${cust.company} / ${state.pitchId} / ${m.w_calc}x${m.h_calc}`;
+  const bodyLines = [
+    "■ 고객 정보",
+    `- 회사명: ${cust.company}`,
+    `- 담당자: ${cust.name}`,
+    `- 연락처: ${cust.tel}`,
+    `- 이메일: ${cust.email}`,
+    `- 주소: ${cust.addr}`,
+    "",
+    "■ 제품 정보(자동 계산)",
+    `- 피치: ${state.pitchId}${p?` (${p.label})`:""}`,
+    `- 사이즈: ${sizeLine}`,
+    `- 입력 시청거리(최소): ${state.view_m?state.view_m+"m":"-"}`,
+    `- 전원: ${OPTIONS.power.find(x=>x.id===state.powerId)?.label||"-"}`,
+    `- 모듈 규격: ${m.module_w}x${m.module_h} (mm)`,
+    `- 모듈 단가: ${Number(m.module_price).toLocaleString("ko-KR")}원`,
+    `- 합계(모듈수×단가): ${price?price.toLocaleString("ko-KR")+"원":"문의"}`,
+    "",
+    "■ 문의 내용",
+    cust.msg,
+    "",
+    "※ 본 메일은 웹페이지에서 자동 작성되었습니다."
+  ];
+  const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines.join("\n"))}`;
+
+  // 일부 브라우저/환경에서 mailto가 막히는 경우를 대비해 클립보드 복사 시도
+  try{
+    navigator.clipboard?.writeText(bodyLines.join("\n"));
+  }catch(e){}
+
+  closeInquiryModal();
+  window.location.href = mailto;
+}
+
+function openQuoteModal(){ el("quoteModal").style.display="flex"; }
+function closeQuoteModal(){ el("quoteModal").style.display="none"; }
+function nowKST(){ return new Date().toLocaleString("ko-KR",{timeZone:"Asia/Seoul"}); }
+function quoteNo(){ const d=new Date(); return `LBOX-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}-${String(d.getTime()).slice(-6)}`; }
+
+function buildPrint(){
+  const supplier = {
+    company1:"엘이디박스",
+    company2:"(주)미라클이앤아이 나주지사",
+    ceo:"김민경",
+    biz:"572-85-02529",
+    tel:"010-4522-2320",
+    email:"7952320@naver.com",
+    addr:"전남 나주시 교육길13(빛가람동) 스마트파크지식산업센터 D2동310호"
+  };
+  const cust = {
+    company: el("custCompany").value||"-",
+    name: el("custName").value||"-",
+    tel: el("custTel").value||"-",
+    email: el("custEmail").value||"-",
+    addr: el("custAddr").value||"-",
+  };
+  if(!state.w_mm||!state.h_mm){ alert("가로/세로를 먼저 입력해 주세요."); return; }
+  if(!state.pitchId){ alert("피치를 선택할 수 없습니다. 시청거리 또는 수동 선택을 확인해 주세요."); return; }
+
+  const p=PITCHES.find(x=>x.id===state.pitchId);
+  const price=calcPrice();
+  const area=(state.w_mm/1000)*(state.h_mm/1000);
+  const m=calcModules();
+  const res=(p && m)?resolution(m.w_calc,m.h_calc,p.pitch):null;
+  const memo=el("memo").value||"-";
+
+  el("quotePrintArea").innerHTML = `
+  <div style="padding:16mm;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR',Arial,sans-serif;color:#111;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+      <div><div style="font-size:22px;font-weight:900;">견 적 서</div><div style="color:#6b7280;font-size:12px;margin-top:4px;">LEDBOX 대형 전광판 자동견적</div></div>
+      <div style="text-align:right;font-size:12px;color:#374151;line-height:1.6;">
+        <div>견적번호: <b>${quoteNo()}</b></div>
+        <div>발행일시: ${nowKST()}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:10mm;display:grid;grid-template-columns:1fr 1fr;gap:10mm;">
+      <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;">
+        <div style="font-weight:900;margin-bottom:6px;">공급자</div>
+        <div style="font-size:12px;line-height:1.7;">
+          ${supplier.company1} ${supplier.company2}<br/>
+          대표자: ${supplier.ceo}<br/>
+          사업자번호: ${supplier.biz}<br/>
+          전화: ${supplier.tel}<br/>
+          이메일: ${supplier.email}<br/>
+          주소: ${supplier.addr}
+        </div>
+      </div>
+      <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;">
+        <div style="font-weight:900;margin-bottom:6px;">수신자(고객)</div>
+        <div style="font-size:12px;line-height:1.7;">
+          회사명: ${cust.company}<br/>
+          담당자: ${cust.name}<br/>
+          연락처: ${cust.tel}<br/>
+          이메일: ${cust.email}<br/>
+          주소: ${cust.addr}
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:10mm;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">
+        <tr><th style="background:#f9fafb;border-bottom:1px solid #e5e7eb;padding:10px;text-align:left;width:28%;">항목</th>
+            <th style="background:#f9fafb;border-bottom:1px solid #e5e7eb;padding:10px;text-align:left;">내용</th></tr>
+        <tr><td style="border-bottom:1px solid #eee;padding:10px;">피치</td><td style="border-bottom:1px solid #eee;padding:10px;">${state.pitchId}</td></tr>
+        <tr><td style="border-bottom:1px solid #eee;padding:10px;">사이즈</td><td style="border-bottom:1px solid #eee;padding:10px;">가로 ${fmtMm(state.w_mm)} × 세로 ${fmtMm(state.h_mm)} (mm)</td></tr>
+        <tr><td style="border-bottom:1px solid #eee;padding:10px;">면적</td><td style="border-bottom:1px solid #eee;padding:10px;">${area.toFixed(2)} ㎡</td></tr>
+        <tr><td style="border-bottom:1px solid #eee;padding:10px;">해상도</td><td style="border-bottom:1px solid #eee;padding:10px;">${res?res.w.toLocaleString("ko-KR")+" × "+res.h.toLocaleString("ko-KR")+" px":"-"}</td></tr>
+        <tr><td style="border-bottom:1px solid #eee;padding:10px;">시청거리</td><td style="border-bottom:1px solid #eee;padding:10px;">최소 ${state.view_m?state.view_m+"m":"-"} (권장: ${state.view_m?Math.max(1,Math.round(state.view_m*1.3))+"m+":"-"})</td></tr>
+        <tr><td style="border-bottom:1px solid #eee;padding:10px;">전원</td><td style="border-bottom:1px solid #eee;padding:10px;">${OPTIONS.power.find(x=>x.id===state.powerId)?.label||"-"}</td></tr>
+        <tr><td style="padding:10px;">비고</td><td style="padding:10px;">${memo}</td></tr>
+      </table>
+    </div>
+
+    <div style="margin-top:10mm;display:flex;justify-content:space-between;align-items:flex-end;gap:16px;">
+      <div style="font-size:12px;color:#6b7280;line-height:1.7;">
+        • 본 견적은 참고용 자동 산출값입니다. 실제 금액은 옵션/설치 환경/물류 조건에 따라 달라질 수 있습니다.<br/>
+        • 배송비/VAT는 별도입니다. 최종 발주 전 상담을 통해 사양 확정을 권장합니다.
+      </div>
+      <div style="min-width:240px;border:1px solid #e5e7eb;border-radius:10px;padding:12px;">
+        <div style="color:#6b7280;font-size:12px;">금액</div>
+        <div style="font-size:22px;font-weight:900;">${price?fmtKRW(price):"문의"}</div>
+      </div>
+    </div>
+  </div>`;
+  el("quotePrintArea").style.display="block";
+  closeQuoteModal();
+  setTimeout(()=>window.print(),250);
+}
+
+/* ===== INIT ===== */
+document.addEventListener("DOMContentLoaded", ()=>{
+  initSelect("powerSelect", OPTIONS.power);
+  el("powerSelect").value = state.powerId;
+  el("pitchSelect").innerHTML=PITCHES.map(p=>`<option value="${p.id}">${p.label}</option>`).join("");
+  el("pitchSelect").value = state.pitchId || "P10";
+  state.pitchId = el("pitchSelect").value;
+
+  el("w_mm").addEventListener("input",()=>{sync("mm");recompute();});
+  el("h_mm").addEventListener("input",()=>{sync("mm");recompute();});
+  el("w_m").addEventListener("input",()=>{sync("m");recompute();});
+  el("h_m").addEventListener("input",()=>{sync("m");recompute();});
+  el("view_m").addEventListener("input",recompute);
+  el("pitchMode").addEventListener("change",recompute);
+  el("pitchSelect").addEventListener("change",()=>{state.pitchId=el("pitchSelect").value;render();});
+  el("powerSelect").addEventListener("change",recompute);
+
+  el("btnPrint").addEventListener("click",openQuoteModal);
+  el("btnInquiryOrder").addEventListener("click", openInquiryModal);
+  el("btnInqCancel").addEventListener("click", closeInquiryModal);
+  el("btnInqSend").addEventListener("click", buildInquiryMail);
+  el("btnModalCancel").addEventListener("click",closeQuoteModal);
+  el("btnModalMake").addEventListener("click",buildPrint);
+
+  recompute();
+});
+
+</script>
+</body>
+</html>
