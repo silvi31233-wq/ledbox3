@@ -293,7 +293,7 @@ function applyOrderLink(){
   const btn = el("btnInquiryOrder");
   if(btn){ btn.disabled = false; }
 }
-}
+
 function initSelect(id,items){
   el(id).innerHTML = items.map(x=>`<option value="${x.id}">${x.label}</option>`).join("");
 }
