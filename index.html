@@ -1,0 +1,986 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LEDBOX 전광판 자동견적</title>
+
+  <style>
+    /* ---- 스코프 격리 ---- */
+    .ledbox-estimator{max-width: 1200px; margin: 20px auto; padding: 0 12px; }
+    .ledbox-estimator { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif; }
+    .ledbox-estimator * { box-sizing: border-box; }
+
+    .ledbox-estimator .le-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); align-items:start; }
+    .ledbox-estimator .le-preview { grid-column: 1 / 2; }
+    .ledbox-estimator .le-side { grid-column: 2 / 3; }
+    .ledbox-estimator .le-controls { grid-column: 1 / 3; }
+
+    .ledbox-estimator .le-card { border: 1px solid #e6e6e6; border-radius: 10px; padding: 14px; background: #fff; }
+    .ledbox-estimator .le-title { margin: 0 0 10px; font-size: 18px; }
+
+    /* 미리보기 */
+    .ledbox-estimator .le-preview-wrap {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #f6f6f6;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ledbox-estimator .le-preview-stage{
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    .ledbox-estimator .le-preview-label{
+      margin-top: 10px;
+      font-weight: 900;
+      font-size: 22px;
+      letter-spacing: -0.3px;
+      color: #111;
+      text-align: center;   /* 원하면 center로 */
+    }
+    .ledbox-estimator .le-preview-stage img{
+      width: 100%;
+      height: 100%;
+      object-fit: contain;   /* ← cover → contain */
+      background: #f4f4f4;   /* 여백이 생길 때 자연스럽게 */
+    }
+
+    /* 오버레이 */
+    .ledbox-estimator .le-overlay{
+      position:absolute;
+      border: 3px solid rgba(255,0,0,.9);
+      background: rgba(255,0,0,.08);
+      box-shadow: 0 0 0 2px rgba(255,255,255,.55);
+      border-radius: 8px;
+      pointer-events:none;
+      overflow:hidden;
+    }
+    .ledbox-estimator .le-overlay img{
+      width:100%;
+      height:100%;
+      object-fit: cover;
+      display:block;
+    }
+
+    /* 가이드(원하면 보이게) */
+    .ledbox-estimator .le-mount-guide{
+      position:absolute;
+      border: 2px dashed rgba(255,0,0,.45);
+      background: rgba(255,0,0,.04);
+      pointer-events:none;
+      border-radius: 6px;
+      display:none; /* 필요하면 block으로 바꾸거나 JS에서 켜기 */
+    }
+
+    .ledbox-estimator .le-preview-note { display:none !important; }
+
+    /* 사양 */
+    .ledbox-estimator .le-spec { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    .ledbox-estimator .le-spec th, .ledbox-estimator .le-spec td { border-top: 1px solid #eee; padding: 10px 8px; font-size: 14px; vertical-align: top; }
+    .ledbox-estimator .le-spec th { width: 38%; color: #333; text-align: left; font-weight: 600; }
+    .ledbox-estimator .le-spec td { color: #111; }
+
+    /* 가격 */
+    .ledbox-estimator .le-price { margin-top: 12px; padding: 12px; border: 1px solid #eee; border-radius: 10px; }
+    .ledbox-estimator .le-price-label { font-size: 14px; color: #666; }
+    .ledbox-estimator .le-price-value { margin-top: 6px; font-size: 22px; font-weight: 800; }
+    .ledbox-estimator .le-price-sub { margin-top: 6px; font-size: 12px; color: #777; }
+
+    /* 버튼 */
+    .ledbox-estimator .le-actions { margin-top: 12px; display: grid; gap: 10px; }
+    .ledbox-estimator .le-btn { display: inline-flex; align-items: center; justify-content: center; height: 44px; border-radius: 10px; border: 1px solid #ddd; background: #fff; text-decoration: none; color: #111; font-weight: 800; }
+    .ledbox-estimator .le-btn-primary { background: #111; color: #fff; border-color: #111; }
+    .ledbox-estimator .le-btn-ghost { background: #f7f7f7; }
+    .ledbox-estimator .le-btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+
+    .ledbox-estimator .le-footnote { margin-top: 10px; font-size: 12px; color: #777; line-height: 1.45; }
+
+    /* 컨트롤 */
+    .ledbox-estimator .le-row { display: grid; grid-template-columns: 1fr 2fr; gap: 14px; }
+    .ledbox-estimator .le-col { min-width: 0; }
+    .ledbox-estimator .le-col-wide { min-width: 0; }
+
+    .ledbox-estimator .le-label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; font-weight: 800; }
+    .ledbox-estimator .le-select { width: 100%; height: 42px; border-radius: 10px; border: 1px solid #ddd; padding: 0 10px; }
+
+    .ledbox-estimator .le-divider { height: 1px; background: #eee; margin: 14px 0; }
+    .ledbox-estimator select{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* 사이즈 표 */
+    .ledbox-estimator .le-size-matrix-wrap { width: 100%; }
+    .ledbox-estimator .le-matrix-title { font-weight: 900; margin: 6px 0 10px; color:#333; }
+
+    .ledbox-estimator .le-size-matrix table{
+      width:100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      border:1px solid #ddd;
+      background:#fff;
+    }
+    .ledbox-estimator .le-size-matrix th,
+    .ledbox-estimator .le-size-matrix td{
+      border:1px solid #ddd;
+      text-align:center;
+      padding:10px 6px;
+      font-size:13px;
+    }
+    .ledbox-estimator .le-size-matrix th{
+      background:#f7f7f7;
+      font-weight:900;
+    }
+    .ledbox-estimator .le-size-matrix td{
+      cursor:pointer;
+      font-weight:900;
+      user-select:none;
+    }
+    .ledbox-estimator .le-size-matrix td:hover{
+      background:#f2f2f2;
+    }
+    .ledbox-estimator .le-size-matrix td.is-active{
+      outline: 2px solid #111;
+      background:#111;
+      color:#fff;
+    }
+    .ledbox-estimator .le-size-matrix td.is-disabled{
+    
+  background:#fafafa;
+  color:#bbb;
+  cursor:not-allowed;
+}
+
+
+    /* 비규격 버튼 */
+    .ledbox-estimator .le-custom-row{
+      margin-top: 10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .ledbox-estimator .le-custom-hint{
+      font-size:12px;
+      color:#666;
+      line-height:1.4;
+    }
+    .ledbox-estimator .le-controls-grid{
+      display: grid;
+      grid-template-columns: 320px 1fr;  /* 왼쪽 고정폭 + 오른쪽 확장 */
+      gap: 18px;
+      align-items: start;
+    }
+
+    .ledbox-estimator .le-controls-left{
+      display: grid;
+      gap: 12px;
+    }
+
+    /* 컨트롤(하단) - 960px 이하에서는 1열 */
+@media (max-width: 960px){
+  .ledbox-estimator .le-controls-grid{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ✅ 미리보기(좌) + 선택정보(우) 는 '진짜 모바일'일 때만 1열로 */
+@media (max-width: 760px){
+  .ledbox-estimator .le-grid{
+    grid-template-columns: 1fr;
+  }
+  .ledbox-estimator .le-preview,
+  .ledbox-estimator .le-side,
+  .ledbox-estimator .le-controls{
+    grid-column: 1 / 2;
+  }
+}
+
+/* ✅ 사진 위/아래 안내문 스타일 */
+#ledboxEstimator .le-preview-topmsg{
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #222;
+}
+
+#ledboxEstimator .le-preview-submsg{
+  margin-top: 8px;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.45;
+}
+
+/* 라벨( P6 / 2단6열 )은 가운데로 */
+#ledboxEstimator .le-preview-label{
+  text-align: center;
+  margin-top: 10px;
+  font-size: 22px; /* 필요하면 20~26 사이로 조절 */
+  font-weight: 900;
+}
+/* ✅ 우측 선택정보 카드 높이 줄이기(텍스트 크기는 유지) */
+#ledboxEstimator .le-side.le-card{
+  padding: 10px 12px !important; /* 기존보다 살짝 축소 */
+}
+
+#ledboxEstimator .le-spec th,
+#ledboxEstimator .le-spec td{
+  padding: 7px 6px !important;   /* 줄 간격 축소 */
+  font-size: 14px;               /* 글씨는 유지 */
+}
+
+#ledboxEstimator .le-price{
+  margin-top: 10px !important;
+  padding: 10px !important;
+}
+
+#ledboxEstimator .le-actions{
+  gap: 8px !important;
+  margin-top: 10px !important;
+}
+
+#ledboxEstimator .le-actions .le-btn{
+  height: 40px !important;       /* 44 → 40 */
+  border-radius: 10px;
+}
+
+  </style>
+</head>
+
+<body style="margin:0; background:#fafafa;">
+  <div class="ledbox-estimator" id="ledboxEstimator" style="max-width:1200px; margin:20px auto; padding:0 12px;">
+    <div class="le-grid">
+
+      <!-- 미리보기 -->
+      <section class="le-card le-preview">
+
+      <!-- ✅ 사진 위 안내문 -->
+      <div class="le-preview-topmsg">
+       피치와 사이즈를 선택하시면 사진 속 전광판(빨간색 박스)의 크기가 변경됩니다.
+      </div>
+
+      <div class="le-preview-wrap">
+       <div class="le-preview-stage">
+       <img id="lePreviewImg" alt="미리보기" />
+      </div>
+  </div>
+
+  <div id="lePreviewLabel" class="le-preview-label"></div>
+
+  <!-- ✅ 사진 아래 보조설명 -->
+  <div class="le-preview-submsg">
+    ※ 일반적인 상가도어 (가로900mm, 세로2,100mm)와 사람(170cm)의 크기를 기준으로 전광판 크기 비율을 참조해 주세요.<br>
+    피치의 숫자가 작을 수록 해상도가 높아 출력품질이 좋습니다.
+  </div>
+
+  <!-- (원하면 삭제/숨김 유지) -->
+  <div class="le-preview-note" id="lePreviewNote"></div>
+</section>
+
+      <!-- 우측 사양/가격/버튼 -->
+      <aside class="le-card le-side">
+        <h3 class="le-title">선택 정보</h3>
+
+        <table class="le-spec" aria-label="사양">
+          <tbody>
+            <tr><th>피치(해상도)</th><td id="leSpecPitch">-</td></tr>
+            <tr><th>모듈 구성</th><td id="leSpecMatrix">-</td></tr>
+            <tr><th>사이즈</th><td id="leSpecSize">-</td></tr>
+            <tr><th>전원</th><td id="leSpecPower">-</td></tr>
+            <tr><th>컨트롤 방식</th><td id="leSpecRemote">-</td></tr>
+            <tr><th>설치방식</th><td id="leSpecInstall">-</td></tr>
+          </tbody>
+        </table>
+
+        <div class="le-price">
+          <div class="le-price-label">가격</div>
+          <div class="le-price-value" id="lePrice">-</div>
+          <div class="le-price-sub" id="lePriceSub">배송비: 문의</div>
+        </div>
+
+        <div class="le-actions">
+          <a class="le-btn le-btn-primary" id="leOrderBtn" href="#" target="_blank" aria-disabled="true">빠른 주문하기</a>
+          <a class="le-btn" id="leQuoteBtn" href="#" target="_blank" aria-disabled="true">견적서 출력</a>
+          <a class="le-btn" id="leInquiryBtn" href="#" target="_blank">문의</a>
+          <a class="le-btn le-btn-ghost" id="leBrowseBtn" href="#" target="_blank">제품 둘러보기</a>
+        </div>
+
+        <div class="le-footnote">
+          * 표시 가격은 임시 계산값입니다. (다음 단계에서 단/열 고정 가격표로 교체 가능)
+        </div>
+      </aside>
+
+      <!-- 하단 선택 UI -->
+      <section class="le-card le-controls">
+       <div class="le-controls-grid">
+      <!-- LEFT: 드롭다운 묶음 -->
+        <div class="le-controls-left">
+         <div class="le-col">
+          <label class="le-label" for="lePitch">피치(해상도)</label>
+          <select id="lePitch" class="le-select"></select>
+         </div>
+
+         <div class="le-col">
+          <label class="le-label" for="lePower">전원</label>
+          <select id="lePower" class="le-select"></select>
+         </div>
+
+         <div class="le-col">
+          <label class="le-label" for="leRemote">컨트롤 방식</label>
+          <select id="leRemote" class="le-select"></select>
+         </div>
+
+         <div class="le-col">
+          <label class="le-label" for="leInstall">설치 방식</label>
+          <select id="leInstall" class="le-select"></select>
+         </div>
+        </div>
+
+        <!-- RIGHT: 사이즈 표 -->
+        <div class="le-controls-right">
+         <div class="le-matrix-title">원하시는 사이즈(단/열)를 클릭하세요</div>
+         <div id="leSizeMatrix" class="le-size-matrix" aria-label="사이즈 선택 표"></div>
+
+         <div class="le-custom-row">
+          <button type="button" class="le-btn le-btn-ghost" id="leCustomBtn">
+          표준범위초과(비규격) 요청
+          </button>
+          <div class="le-custom-hint" id="leCustomHint" style="display:none;">
+          비규격 모드입니다. ‘문의’ 버튼만 활성화됩니다.
+          </div>
+         </div>
+        </div>
+       </div>
+
+      </section>
+
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const BG_IMAGE_URL = "https://ledbox001.cafe24.com/%EC%A0%9C%ED%92%88%EC%84%A0%ED%83%9D/%EC%83%81%EA%B0%80%EB%AC%B8.png";
+      // ↑ 만약 배경이 안 뜨면, 아래 줄로 교체하세요:
+     
+
+      const fmt = (n) => (n ?? 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "원";
+
+      // ✅ 모듈 1장의 실제 mm (네 규격에 맞게 수정)
+      const MODULE = { w: 320, h: 160 };
+
+      // ✅ 표(단/열) 범위 (원하는 범위로 수정)
+      // 단 = 가로 모듈 개수, 열 = 세로 모듈 개수
+      const MATRIX_ROWS = [1,2,3,4];
+      const MATRIX_COLS = [6,8,10,12,14,16];
+
+      // ✅ 피치 메뉴
+      const PITCHES = [
+        { id:"P6",  label:"P6 (보통해상도)", priceFactor: 1.00 },
+        { id:"P8",  label:"P8 (보통해상도)", priceFactor: 0.85 },
+        { id:"P10", label:"P10 (저해상도)",  priceFactor: 0.70 },
+      ];
+
+      // ✅ 피치별 가능한 조합(단/열)
+function previewImgUrl(pitchId, row, col){
+// pitchId가 "P6", "P6 (보통해상도)" 같은 형태여도 P숫자만 뽑아 폴더명으로 사용
+  const m = String(pitchId || "").match(new RegExp("P\\d+", "i"));
+  const pid = (m ? m[0] : "P6").toUpperCase(); // 폴더명 P6/P8/P10
+
+  const r = Number(row);
+  const c = Number(col);
+
+  // ASCII 파일명: 2x6.png
+  return new URL(`${pid}/${r}x${c}.png`, document.baseURI).href;
+}
+
+
+// =========================
+// 수동 가격/사이즈 테이블 (직접 수정)
+// 키 형식: "P6:2x6"  (피치:단x열)
+// w/h 단위: mm, price 단위: 원(숫자)
+// 예) "P6:2x6": { w: 640, h: 960, price: 1230000 },
+const MANUAL_TABLE = {
+  "P6:2x6": { w: 648, h: 264, price: 450000 },
+  "P6:2x8": { w: 840, h: 264, price: 500000 },
+  "P6:2x10": { w: 1032, h: 264, price: 550000 },
+  "P6:2x12": { w: 1224, h: 264, price: 600000 },
+  "P6:4x6": { w: 648, h: 456, price: 650000 },
+  "P6:4x8": { w: 840, h: 456, price: 700000 },
+  "P6:4x10": { w: 1032, h: 456, price: 800000 },
+  "P6:4x12": { w: 1224, h: 456, price: 900000 },
+  "P8:2x6": { w: 840, h: 332, price: 480000 },
+  "P8:2x8": { w: 1096, h: 332, price: 520000 },
+  "P8:2x10": { w: 1352, h: 332, price: 580000 },
+  "P8:2x12": { w: 1608, h: 332, price: 650000 },
+  "P8:4x6": { w: 840, h: 588, price: 650000 },
+  "P8:4x8": { w: 1096, h: 588, price: 800000 },
+  "P8:4x10": { w: 1352, h: 588, price: 880000 },
+  "P8:4x12": { w: 1608, h: 588, price: 1100000 },
+  "P10:1x6": { w: 1032, h: 236, price: 500000 },
+  "P10:1x8": { w: 1340, h: 236, price: 550000 },
+  "P10:1x10": { w: 1660, h: 236, price: 610000 },
+  "P10:1x12": { w: 1980, h: 236, price: 670000 },
+  "P10:2x6": { w: 1032, h: 396, price: 670000 },
+  "P10:2x8": { w: 1340, h: 396, price: 780000 },
+  "P10:2x10": { w: 1660, h: 396, price: 880000 },
+  "P10:2x12": { w: 1980, h: 396, price: 1000000 },
+  "P10:2x14": { w: 2300, h: 396, price: 1110000 },
+  "P10:2x16": { w: 2620, h: 396, price: 1210000 },
+  "P10:3x6": { w: 1032, h: 556, price: 830000 },
+  "P10:3x8": { w: 1340, h: 556, price: 1000000 },
+  "P10:3x10": { w: 1660, h: 556, price: 1160000 },
+  "P10:3x12": { w: 1980, h: 556, price: 1390000 },
+  "P10:3x14": { w: 2300, h: 556, price: 1550000 },
+  "P10:3x16": { w: 2620, h: 556, price: 1720000 },
+};
+// -------------------------
+
+function manualKey(pitchId, row, col){
+  const m = String(pitchId || "").match(new RegExp("P\\d+","i"));
+  const pid = (m ? m[0] : "P6").toUpperCase();
+  return `${pid}:${Number(row)}x${Number(col)}`;
+}
+
+function manualGet(pitchId, row, col){
+  const k = manualKey(pitchId, row, col);
+  return MANUAL_TABLE[k] || null;
+}
+
+const ALLOWED = {
+  P6:  [
+    [2,6],[2,8],[2,10],[2,12],
+    [4,6],[4,8],[4,10],[4,12],
+  ],
+  P8:  [
+    [2,6],[2,8],[2,10],[2,12],
+    [4,6],[4,8],[4,10],[4,12],
+  ],
+  P10: [
+    [1,6],[1,8],[1,10],[1,12],
+    [2,6],[2,8],[2,10],[2,12],[2,14],[2,16],
+    [3,6],[3,8],[3,10],[3,12],[3,14],[3,16],
+  ],
+};
+
+// 빠른 체크용 Set 생성
+function allowedSetForPitch(pitchId){
+  const list = ALLOWED[pitchId] || [];
+  return new Set(list.map(([r,c]) => `${r}x${c}`));
+}
+
+
+      // 옵션(예시)
+      const OPTIONS = {
+        power: [
+          { id:"220V", label:"220V (기본)", add: 0 },
+          { id:"12V",  label:"DC24V", add: 0 },
+          { id:"3PH",  label:"삼상전원", add: 200000 }
+        ],
+        remote: [
+          { id:"RF",   label:"무선 리모컨 (기본)", add: 25000 },
+          { id:"LAN", label:"컴퓨터 LAN", add: 80000 },
+        ],
+        install: [
+          { id:"wall",  label:"벽부착 (기본)", add: 0 },
+          { id:"roof", label:"지붕부착", add: 100000 },
+          { id:"wire", label:"와이어 거치", add: 100000 },
+        ],
+      };
+
+      // 임시 가격(다음에 고정가표로 교체 예정)
+      const BASE_PER_M2 = 650000;
+
+      // ✅ 설치 영역(오버레이가 놓일 기준 박스) - 숫자만 튜닝하면 됨
+      const MOUNT_BOX = { x: 0.35, y: 0.30, w: 0.30, h: 0.18 };
+
+      // =========================
+      // DOM
+      // =========================
+      const $label = document.getElementById("lePreviewLabel");
+      const $pitch = document.getElementById("lePitch");
+      const $power = document.getElementById("lePower");
+      const $remote = document.getElementById("leRemote");
+      const $install = document.getElementById("leInstall");
+
+      const $sizeMatrix = document.getElementById("leSizeMatrix");
+
+      const $img = document.getElementById("lePreviewImg");
+      const $note = document.getElementById("lePreviewNote");
+      const $overlay = document.getElementById("leOverlay");
+      const $overlayImg = document.getElementById("leOverlayImg");
+      const $guide = document.getElementById("leMountGuide");
+
+      const $specPitch = document.getElementById("leSpecPitch");
+      const $specMatrix = document.getElementById("leSpecMatrix");
+      const $specSize = document.getElementById("leSpecSize");
+      const $specPower = document.getElementById("leSpecPower");
+      const $specRemote = document.getElementById("leSpecRemote");
+      const $specInstall = document.getElementById("leSpecInstall");
+
+      const $price = document.getElementById("lePrice");
+      const $priceSub = document.getElementById("lePriceSub");
+
+      const $orderBtn = document.getElementById("leOrderBtn");
+      const $quoteBtn = document.getElementById("leQuoteBtn");
+      const $inquiryBtn = document.getElementById("leInquiryBtn");
+      const $browseBtn = document.getElementById("leBrowseBtn");
+
+      const $customBtn = document.getElementById("leCustomBtn");
+      const $customHint = document.getElementById("leCustomHint");
+
+      // =========================
+      // 상태
+      // =========================
+      const state = {
+        pitchId: PITCHES[0].id,
+        row: 1,   // 단
+        col: 6,   // 열
+        isCustom: false,
+        powerId: OPTIONS.power[0].id,
+        remoteId: OPTIONS.remote[0].id,
+        installId: OPTIONS.install[0].id
+      };
+
+      function sizeFromMatrix(row, col){
+        const it = manualGet(state.pitchId, row, col);
+        if (it && typeof it.w === "number" && typeof it.h === "number"){
+          return { w: it.w, h: it.h };
+        }
+        return { w: row * MODULE.w, h: col * MODULE.h };
+      }
+
+     function overlayImgUrl(pitchId, row, col){
+  // overlay도 preview와 동일한 파일(ASCII: 2x6.png)을 사용
+  const m = String(pitchId || "").match(new RegExp("P\\d+", "i"));
+  const pid = (m ? m[0] : "P6").toUpperCase();
+  const r = Number(row);
+  const c = Number(col);
+  return new URL(`${pid}/${r}x${c}.png`, document.baseURI).href;
+}
+
+
+      // =========================
+      // 렌더
+      // =========================
+      function buildSelect($el, items, currentId){
+        $el.innerHTML = "";
+        items.forEach(it => {
+          const opt = document.createElement("option");
+          opt.value = it.id;
+          opt.textContent = it.label;
+          if (it.id === currentId) opt.selected = true;
+          $el.appendChild(opt);
+        });
+      }
+
+      function renderSizeMatrix(){
+  if (!$sizeMatrix) return;
+
+  const allow = allowedSetForPitch(state.pitchId);
+
+  // 현재 선택값이 허용 목록에 없으면, 해당 피치의 첫 번째 허용값으로 자동 보정
+  const curKey = `${state.row}x${state.col}`;
+  if (!allow.has(curKey)){
+    const first = (ALLOWED[state.pitchId] || [])[0];
+    if (first){
+      state.row = first[0];
+      state.col = first[1];
+      state.isCustom = false;
+    }
+  }
+
+  let html = `<table><thead><tr><th></th>`;
+  MATRIX_COLS.forEach(c => html += `<th>${c}열</th>`);
+  html += `</tr></thead><tbody>`;
+
+  MATRIX_ROWS.forEach(r => {
+    html += `<tr><th>${r}단</th>`;
+    MATRIX_COLS.forEach(c => {
+      const key = `${r}x${c}`;
+      const enabled = allow.has(key);
+      const active = enabled && (r === state.row && c === state.col) && !state.isCustom;
+
+      const cls = enabled ? (active ? "is-active" : "") : "is-disabled";
+      html += `<td class="${cls}" data-r="${r}" data-c="${c}">${r}단${c}열</td>`;
+    });
+    html += `</tr>`;
+  });
+
+  html += `</tbody></table>`;
+  $sizeMatrix.innerHTML = html;
+
+  // 클릭 이벤트(허용 조합만 클릭 가능)
+  $sizeMatrix.querySelectorAll("td[data-r]").forEach(td => {
+    td.addEventListener("click", () => {
+      if (td.classList.contains("is-disabled")) return;
+
+      const r = Number(td.dataset.r);
+      const c = Number(td.dataset.c);
+
+      state.row = r;
+      state.col = c;
+      state.isCustom = false;
+      renderAll();
+    });
+  });
+}
+
+
+      function renderSpec(){
+        const s = sizeFromMatrix(state.row, state.col);
+
+        $specPitch.textContent = state.pitchId;
+        $specMatrix.textContent = `${state.row}단 ${state.col}열`;
+        $specSize.textContent = `가로 ${s.w} × 세로 ${s.h} (mm)`;
+
+        $specPower.textContent = OPTIONS.power.find(x=>x.id===state.powerId)?.label ?? "-";
+        $specRemote.textContent = OPTIONS.remote.find(x=>x.id===state.remoteId)?.label ?? "-";
+        $specInstall.textContent = OPTIONS.install.find(x=>x.id===state.installId)?.label ?? "-";
+      }
+
+      function calcPrice(){
+        const it = manualGet(state.pitchId, state.row, state.col);
+        const addPower = (OPTIONS.power.find(x=>x.id===state.powerId)?.add ?? 0);
+        const addRemote = (OPTIONS.remote.find(x=>x.id===state.remoteId)?.add ?? 0);
+        const addInstall = (OPTIONS.install.find(x=>x.id===state.installId)?.add ?? 0);
+
+        if (it && typeof it.price === "number"){
+          return it.price + addPower + addRemote + addInstall;
+        }
+        // 수동표에 없으면 null 반환(문의 표시)
+        return null;
+      }
+
+      function renderPrice(){
+        if (state.isCustom){
+          $price.textContent = "문의";
+          $priceSub.textContent = "비규격(표준범위초과): 상담 후 견적";
+          return;
+        }
+        const p = calcPrice();
+        if (p === null){
+          $price.textContent = "문의";
+          $priceSub.textContent = "해당 조합은 수동 가격표에 없습니다.";
+          return;
+        }
+        $price.textContent = fmt(p);
+        $priceSub.textContent = "배송비: 문의 / VAT: 별도(정책에 맞게 수정)";
+      }
+
+      function renderPreview(){
+        const url = previewImgUrl(state.pitchId, state.row, state.col);
+
+        if ($label) $label.textContent = `${state.pitchId} / ${state.row}단${state.col}열`;
+
+        $img.onerror = () => {
+         if ($note) $note.textContent = "미리보기 이미지 로딩 실패: 파일 경로/파일명 확인 필요";
+        };
+
+        $img.onload = () => {
+         if ($note) $note.textContent = ""; // 밑에 작은 텍스트는 비워버림(원하면 유지 가능)
+        };
+
+        $img.src = url;
+      }
+
+      function syncPreviewHeight(){
+       const previewCard = document.querySelector(".le-preview");
+       const previewWrap = document.querySelector(".le-preview-wrap");
+       const sideCard = document.querySelector(".le-side");
+
+      if (!previewCard || !previewWrap || !sideCard) return;
+
+      // 우측 박스 전체 높이
+      const sideHeight = sideCard.offsetHeight;
+
+      // 좌측 카드의 상단 안내문 + 하단 텍스트 높이 제외 계산
+      const topMsg = previewCard.querySelector(".le-preview-topmsg");
+      const label = previewCard.querySelector(".le-preview-label");
+      const subMsg = previewCard.querySelector(".le-preview-submsg");
+
+      const extraHeight =
+       (topMsg?.offsetHeight || 0) +
+       (label?.offsetHeight || 0) +
+       (subMsg?.offsetHeight || 0) +
+       30; // 여백 보정
+
+      // 사진 영역 높이 = 우측 전체 높이 - 안내문 영역
+      const targetHeight = sideHeight - extraHeight;
+
+      if (targetHeight > 100) {
+      previewWrap.style.height = targetHeight + "px";
+  }
+}
+
+      // expose for resize handler
+      window.syncPreviewHeight = syncPreviewHeight;
+
+
+      function renderOverlayBox(){
+        const stage = document.querySelector(".le-preview-stage");
+        if (!stage || !$overlay) return;
+
+        const rect = stage.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+
+        // 오버레이를 "설치 영역"에 위치시키고,
+        // 현재는 설치영역 크기로 고정(다음 단계에서 mm비율 반영 가능)
+        $overlay.style.left   = rect.width  * MOUNT_BOX.x + "px";
+        $overlay.style.top    = rect.height * MOUNT_BOX.y + "px";
+        $overlay.style.width  = rect.width  * MOUNT_BOX.w + "px";
+        $overlay.style.height = rect.height * MOUNT_BOX.h + "px";
+
+        // (선택) 가이드 표시 켜고 싶으면 display를 block으로
+        // $guide.style.display = "block";
+        if ($guide && $guide.style.display !== "none"){
+          $guide.style.left = $overlay.style.left;
+          $guide.style.top = $overlay.style.top;
+          $guide.style.width = $overlay.style.width;
+          $guide.style.height = $overlay.style.height;
+        }
+      }
+
+      function renderOverlayImage(){
+      if (!$overlayImg) return;
+
+  if (state.isCustom){
+    $overlayImg.style.display = "none";
+    return;
+  }
+
+  const url = overlayImgUrl(state.pitchId, state.row, state.col);
+
+  // 1) 이미지 로드
+  const img = new Image();
+  img.crossOrigin = "anonymous"; // 같은 도메인이면 상관없지만 안전하게
+  img.onload = async () => {
+    try {
+      // 2) 투명 여백 크롭해서 dataURL로 변환
+      const croppedDataUrl = cropTransparentPNG(img);
+      $overlayImg.src = croppedDataUrl;
+      $overlayImg.style.display = "block";
+    } catch (e) {
+      // 크롭 실패시 원본 그대로 표시
+      $overlayImg.src = url;
+      $overlayImg.style.display = "block";
+    }
+  };
+  img.onerror = () => {
+    $overlayImg.style.display = "none";
+  };
+
+  img.src = url;
+}
+
+// 투명(알파=0) 여백을 잘라내는 함수
+function cropTransparentPNG(img){
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  ctx.drawImage(img, 0, 0);
+
+  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  let minX = width, minY = height, maxX = 0, maxY = 0;
+  let found = false;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const a = data[(y * width + x) * 4 + 3]; // alpha
+      if (a > 0) {
+        found = true;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  // 내용이 없으면 원본 반환
+  if (!found) return canvas.toDataURL("image/png");
+
+  const cropW = maxX - minX + 1;
+  const cropH = maxY - minY + 1;
+
+  const out = document.createElement("canvas");
+  out.width = cropW;
+  out.height = cropH;
+  const outCtx = out.getContext("2d");
+  outCtx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+
+  return out.toDataURL("image/png");
+}
+
+      function buildQuery(){
+        const s = sizeFromMatrix(state.row, state.col);
+        const params = new URLSearchParams({
+          pitch: state.pitchId,
+          row: state.row,
+          col: state.col,
+          w: s.w,
+          h: s.h,
+          custom: state.isCustom ? "1" : "0",
+          power: state.powerId,
+          remote: state.remoteId,
+          install: state.installId
+        });
+        return params.toString();
+      }
+
+      function applyLinks(){
+        const q = buildQuery();
+
+        // TODO: 네 실제 URL로 교체
+        $orderBtn.href = "https://ledbox.co.kr";         // 빠른 주문하기
+        $quoteBtn.href = "https://ledbox.co.kr";         // 견적서 출력(추후 print 페이지로)
+        $browseBtn.href = "https://ledbox.co.kr";        // 제품 둘러보기
+
+        // 문의 버튼: 네 문의 페이지로 바꾸고, query 붙여서 넘기기
+        $inquiryBtn.href = "https://ledbox.co.kr/board/consult/write.html?" + q;
+      }
+
+      function setButtonsByMode(){
+        const isCustom = !!state.isCustom;
+
+        // 표준이면 주문/견적 활성, 비규격이면 비활성
+        $orderBtn.setAttribute("aria-disabled", isCustom ? "true" : "false");
+        $quoteBtn.setAttribute("aria-disabled", isCustom ? "true" : "false");
+
+        // 문의는 항상 가능
+        $inquiryBtn.setAttribute("aria-disabled", "false");
+
+        if ($customHint) $customHint.style.display = isCustom ? "block" : "none";
+      }
+
+      function renderAll(){
+  renderSizeMatrix();
+  renderSpec();
+  renderPrice();
+  renderPreview();      // ✅ 이게 메인 미리보기
+  applyLinks();
+  setButtonsByMode();
+  syncPreviewHeight();  // ✅ 추가
+}
+
+
+      // =========================
+      // 초기화
+      // =========================
+      buildSelect($pitch, PITCHES.map(p => ({id:p.id, label:p.label})), state.pitchId);
+      buildSelect($power, OPTIONS.power, state.powerId);
+      buildSelect($remote, OPTIONS.remote, state.remoteId);
+      buildSelect($install, OPTIONS.install, state.installId);
+
+      $pitch.addEventListener("change", (e)=>{
+  state.pitchId = e.target.value;
+  state.isCustom = false;
+  renderAll(); // renderSizeMatrix가 알아서 row/col 보정
+});
+
+      $power.addEventListener("change", (e)=>{ state.powerId = e.target.value; renderAll(); });
+      $remote.addEventListener("change", (e)=>{ state.remoteId = e.target.value; renderAll(); });
+      $install.addEventListener("change", (e)=>{ state.installId = e.target.value; renderAll(); });
+
+      $customBtn.addEventListener("click", ()=>{ state.isCustom = true; renderAll(); });
+
+      renderAll();
+    })();
+  window.addEventListener("resize", function(){ if (window.syncPreviewHeight) window.syncPreviewHeight(); });
+  </script>
+
+<!-- ====== 견적서 모달 및 인쇄 레이아웃 ====== -->
+<style>
+#quoteModal{
+  position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  display:none; align-items:center; justify-content:center; z-index:9999;
+}
+#quoteModal .modal-box{
+  background:#fff; padding:24px; border-radius:12px; width:420px; max-width:95%;
+}
+#quoteModal input{ width:100%; padding:8px; margin:6px 0 12px; }
+#quotePrintArea{ display:none; }
+
+@media print {
+  body * { visibility:hidden; }
+  #quotePrintArea, #quotePrintArea * { visibility:visible; }
+  #quotePrintArea { position:absolute; left:0; top:0; width:100%; }
+}
+</style>
+
+<div id="quoteModal">
+  <div class="modal-box">
+    <h3>고객 정보 입력</h3>
+    <input id="custCompany" placeholder="회사명">
+    <input id="custName" placeholder="담당자">
+    <input id="custTel" placeholder="연락처">
+    <input id="custEmail" placeholder="이메일">
+    <input id="custAddr" placeholder="주소">
+    <button onclick="generateQuote()">견적서 생성</button>
+    <button onclick="closeQuoteModal()">취소</button>
+  </div>
+</div>
+
+<div id="quotePrintArea"></div>
+
+<script>
+function openQuoteModal(){
+  document.getElementById("quoteModal").style.display="flex";
+}
+function closeQuoteModal(){
+  document.getElementById("quoteModal").style.display="none";
+}
+
+function generateQuote(){
+  const company = document.getElementById("custCompany").value || "-";
+  const name = document.getElementById("custName").value || "-";
+  const tel = document.getElementById("custTel").value || "-";
+  const email = document.getElementById("custEmail").value || "-";
+  const addr = document.getElementById("custAddr").value || "-";
+
+  const pitch = window.state?.pitchId || "-";
+  const row = window.state?.row || "-";
+  const col = window.state?.col || "-";
+  const size = (typeof sizeFromMatrix === "function") ? sizeFromMatrix(row,col) : {w:"-",h:"-"};
+  const price = (typeof calcPrice === "function") ? calcPrice() : null;
+
+  const html = `
+    <div style="padding:40px; font-family:sans-serif;">
+      <h2>견 적 서</h2>
+      <hr>
+      <h3>공급자 정보</h3>
+      <p>엘이디박스 (주)미라클이앤아이 나주지사<br>
+      대표자: 김민경<br>
+      사업자번호: 572-85-02529<br>
+      전화: 010-4522-2320<br>
+      이메일: 7952320@naver.com<br>
+      주소: 전남 나주시 교육길13 스마트파크지식산업센터 D2동310호</p>
+
+      <h3>수신자 정보</h3>
+      <p>회사명: ${company}<br>
+      담당자: ${name}<br>
+      연락처: ${tel}<br>
+      이메일: ${email}<br>
+      주소: ${addr}</p>
+
+      <h3>제품 정보</h3>
+      <p>피치: ${pitch}<br>
+      구성: ${row}단 ${col}열<br>
+      사이즈: ${size.w} x ${size.h} mm<br>
+      금액: ${price ? price.toLocaleString()+"원" : "문의"}</p>
+    </div>
+  `;
+
+  const area = document.getElementById("quotePrintArea");
+  area.innerHTML = html;
+  area.style.display="block";
+
+  closeQuoteModal();
+  setTimeout(()=>{ window.print(); }, 300);
+}
+</script>
+
+</body>
+</html>
